@@ -68,6 +68,7 @@ payload map(covidCase, indexOfCovidCase) -> {
 				<raise-error doc:name="Raise CUSTOM:CASE_NOT_FOUND error" doc:id="03ee7804-b9e7-4cbf-b3b6-cdae2cecf398" type="CUSTOM:CASE_NOT_FOUND" description="The server has not found anything matching the Request-URI" />
 			</otherwise>
 		</choice>
+		<logger level="INFO" doc:name="Logger" doc:id="10d23fc0-be49-405b-b59f-cfcf257b34bb" message="Commit"/>
 		<logger level="INFO" doc:name="End Log" doc:id="444cb59f-2580-4846-af26-e4451bea82ed" message='transactionId: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Started update flow", payload:#[payload]' />
 		<error-handler >
 			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="5d5187b0-fb48-47a9-b615-76536f1b9852" type="CUSTOM:CASE_NOT_FOUND" >
