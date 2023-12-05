@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<flow name="get:\reports:uhub-sapi-config">
+		<ee:transform doc:name="Set correlationId and input payload" doc:id="a5064279-80a3-4ee2-ba99-f55139a1baa5" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="correlationId" ><![CDATA[%dw 2.0
+output application/java
+---
+attributes.headers.'x-correlation-id' default ""]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Start Log" doc:id="27dbef6d-5c4e-4a7b-98ef-a6b0505e01e8" message='transactionId: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Started get reports flow", payload:#[payload]' />
+		<ee:transform doc:name="Prepare Dynamic sql query" doc:id="d456100e-343f-413a-86cc-e509ad2ef801" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="reportsDynamicQuery" ><![CDATA[if(!isEmpty(attributes.queryParams.state))(
+	"select count(*) as count, case_type, state from cvd_case_master where upper(state) = '" ++ upper(attributes.queryParams.state) as String ++ "'group by case_type, state"
+) else (
+	"select count(*) as count, case_type, state from cvd_case_master group by case_type, state"
+)]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:select doc:name="Select Case Reports" doc:id="607de9b3-1926-4597-8115-d24baed68f01" config-ref="uhub-mysql-configuration" >
+			<db:sql ><![CDATA[#[vars.reportsDynamicQuery]]]></db:sql>
+		</db:select>
+		<ee:transform doc:name="Prepare Response" doc:id="0c1213b5-db5d-44cf-a96e-73b7eb886b25" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+fun vaccinatedByState(state) = (payload filter(($.STATE == state as String) and ($.CASE_TYPE == "vaccinated")) map {
+	COUNT: $.COUNT
+}) [0]
+---
+((payload groupBy($.STATE) mapObject {
+	caseReports: {
+		state: $$,
+		reports:{
+			total: ($.COUNT reduce $ + $$) - (vaccinatedByState($$).COUNT as Number default 0),
+				($ orderBy($.CASE_TYPE) map {
+					($.CASE_TYPE):$.COUNT
+				})
+		}
+	}
+}).*caseReports) default []]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="End Log" doc:id="1da7b539-e6d6-4a1f-8e24-b54a2cf3dfc8" message='transactionId: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Ended get reports flow", payload:#[payload]' />
+    
+</flow>
+	</mule>

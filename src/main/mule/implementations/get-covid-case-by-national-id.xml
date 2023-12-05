@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<flow name="get:\(nationalID):uhub-sapi-config">
+		<ee:transform doc:name="Set correlationId and input payload" doc:id="0091dbfc-e950-490a-8fb3-62af1996b92c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="correlationId" ><![CDATA[%dw 2.0
+output application/java
+---
+attributes.headers.'x-correlation-id' default ""]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Start Log" doc:id="a27a044b-0a57-4c3f-9b84-1382c23d7908" message='transactionId: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Started update flow", payload:#[payload]' />
+		<db:select doc:name="Get Cases by National Id" doc:id="53549fc1-808b-4a74-aac4-28215a447e65" config-ref="uhub-mysql-configuration" >
+			<db:sql ><![CDATA[select * from cvd_case_master where national_id = :national_id]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	national_id: attributes.uriParams.nationalId
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="2648ec77-a938-42e5-aacc-9a0c1a8169be" >
+			<when expression="#[sizeOf(payload) &gt; 0]" >
+				<ee:transform doc:name="Set Response found" doc:id="b514076d-2592-4063-86d7-c2eab3cb8fea" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map(covidCase, indexOfCovidCase) -> {
+	caseId: covidCase.case_id,
+	source: covidCase.source,
+	caseType: covidCase.case_type,
+	firstName: covidCase.first_name,
+	lastName: covidCase.last_name,
+	phone: covidCase.phone,
+	email: covidCase.email,
+	dateOfBirth: covidCase.date_of_birth as Date,
+	nationalId: covidCase.national_id,
+	nationalIdType: covidCase.national_id_type,
+	address:{
+		street_address: covidCase.street_address,
+		city: covidCase.city,
+		state: covidCase.state,
+		postal: covidCase.postal,
+		country: covidCase.country
+		},
+	createDate: covidCase.create_date,
+	updateDate: covidCase.update_date
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="statusCode" ><![CDATA[200]]></ee:set-variable>
+						<ee:set-variable variableName="statusReason" ><![CDATA["OK"]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<raise-error doc:name="Raise CUSTOM:CASE_NOT_FOUND error" doc:id="03ee7804-b9e7-4cbf-b3b6-cdae2cecf398" type="CUSTOM:CASE_NOT_FOUND" description="The server has not found anything matching the Request-URI" />
+			</otherwise>
+		</choice>
+		<logger level="INFO" doc:name="End Log" doc:id="444cb59f-2580-4846-af26-e4451bea82ed" message='transactionId: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Started update flow", payload:#[payload]' />
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="5d5187b0-fb48-47a9-b615-76536f1b9852" type="CUSTOM:CASE_NOT_FOUND" >
+				<ee:transform doc:name="Set Response not found an" doc:id="1fffa77f-7473-4d9b-9b9b-d7d8c666e9b1" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"code": 404,
+	"message": "Resource not found",
+	"description": "The server has not found anything matching the Request-URI",
+	"dateTime": now() as DateTime,
+	"transactionId": vars.transactionId	
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="statusReason" ><![CDATA["Resource not found"]]></ee:set-variable>
+						<ee:set-variable variableName="httpStatus" ><![CDATA[404]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-continue>
+		</error-handler>
+    
+</flow>
+	</mule>

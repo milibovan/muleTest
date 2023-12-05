@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<flow name="post:\v1\cases:application\json:uhub-sapi-config">
+		<ee:transform doc:name="Set correlationId and input payload" doc:id="f43e9782-2cbb-46ab-ae7b-ccfc025089c5" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="correlationId" ><![CDATA[%dw 2.0
+output application/java
+---
+attributes.headers.'x-correlation-id' default ""]]></ee:set-variable>
+				<ee:set-variable variableName="inputPayload" ><![CDATA[payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Start Log" doc:id="15295509-f933-449c-8333-d02e08c9caf0" message='transactionId: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Started register flow", payload:#[payload]' />
+		<ee:transform doc:name="Prepare Covid Case Payload" doc:id="76d3d9c9-3bda-47a6-9d93-c60dffadd7d4" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="covidPayload" ><![CDATA[%dw 2.0
+output application/java
+var actionDate = now() as Date
+var owner = "UHIS"
+---
+{
+	national_id: vars.inputPayload.nationalID,
+	street_address: vars.inputPayload.address.streetAddress,
+	country: vars.inputPayload.address.country,
+	city: vars.inputPayload.address.city,
+	date_of_birth: vars.inputPayload.dateOfBirth,
+	case_type: vars.inputPayload.caseType,
+	last_name: vars.inputPayload.lastName,
+	source: vars.inputPayload.source,
+	national_id_type: vars.inputPayload.nationalIDType,
+	update_date: actionDate,
+	create_by: owner,
+	phone: vars.inputPayload.phone,
+	state: vars.inputPayload.address.state,
+	postal: vars.inputPayload.address.postal,
+	create_date: actionDate,
+	update_by: owner,
+	first_name: vars.inputPayload.firstName,
+	email: vars.inputPayload.email
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:insert doc:id="481bf37e-251c-41d0-abe6-f41069ef9a95" config-ref="uhub-mysql-configuration" doc:name="Insert Covid Case Master" >
+			<error-mapping sourceType="DB:CONNECTIVITY" targetType="CUSTOM:CONNECTION_FAILED" />
+			<db:sql ><![CDATA[INSERT INTO cvd_case_master 
+                (source, case_type, 
+                 first_name, last_name, 
+                 phone, email, 
+                 date_of_birth, national_id, 
+                 national_id_type, street_address, 
+                 city, state, 
+                 postal, country, 
+                 create_date, update_date, 
+                 create_by, update_by) 
+    VALUES     (:source, :case_type, 
+                 :first_name, :last_name, 
+                 :phone, :email, 
+                 :date_of_birth, :national_id, 
+                 :national_id_type, :street_address, 
+                 :city, :state, 
+                 :postal, :country, 
+                 :create_date, :update_date, 
+                 :create_by, :update_by)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[vars.covidPayload]]]></db:input-parameters>
+		</db:insert>
+		<db:select doc:id="469a82ea-6114-4787-8a71-ef287b4f530c" config-ref="uhub-mysql-configuration" doc:name="Select_Case_Id" >
+			<db:sql ><![CDATA[select max(case_id) as case_id from cvd_case_master where national_id = :national_id]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	national_id: vars.covidPayload.national_id
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Prepare Response" doc:id="b27b8146-1e7f-4b2a-b8ef-9440a21ae627" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"caseID" : payload[0].case_id
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="statusReason" ><![CDATA["CREATED"]]></ee:set-variable>
+				<ee:set-variable variableName="httpStatus" ><![CDATA[201]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="End Log" doc:id="3b1dfb58-3ae8-4682-abaf-11f1c3310ca1" message='transactionId: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Ended register flow", payload:#[payload]' />
+    
+</flow>
+	</mule>
